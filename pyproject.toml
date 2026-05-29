@@ -1,0 +1,13 @@
+[project]
+name = "ais-dev2il-wine-quality"
+version = "0.1.0"
+description = "The final project to prepare for the exam."
+readme = "README.md"
+requires-python = ">=3.13"
+# the Python modules used in the project has to be listed here
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "dvc[s3]>=3.67.1",
+]
