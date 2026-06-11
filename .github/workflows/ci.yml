@@ -1,0 +1,85 @@
+name: API CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/api/**'
+      - 'Dockerfile'
+      - 'requirements-api.txt'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  quality-and-security:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Linting & Security Tools
+        run: pip install ruff bandit
+
+      - name: Run Security Scanning (Bandit)
+        run: bandit -r src/api/
+
+      - name: Lint with Ruff
+        run: ruff check src/api/
+
+  test-and-build:
+    name: Test & Build Docker Image
+    needs: quality-and-security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install API Dependencies
+        run: pip install -r requirements-api.txt pytest
+
+      - name: Run API Unit Tests
+        run: pytest tests/api/
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+            latest
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ std.meta.outputs.tags }}
+          labels: ${{ std.meta.outputs.labels }}
