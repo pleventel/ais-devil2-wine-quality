@@ -1,0 +1,39 @@
+# Build dependencies
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+
+WORKDIR /app
+
+# Enable bytecode compilation for faster application runtime execution
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Copy only dependency description specifications first to optimize layer caching
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --frozen --no-install-project --no-dev
+
+# Runtime environment
+FROM python:3.13-slim-bookworm AS runner
+
+WORKDIR /app
+
+# Prevent Python from writing .pyc files and force unbuffered logging streams
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Copy the pre-compiled virtual environment directly from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+
+# Pre-set path targeting to the isolated virtual environment binaries
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy application processing tools and downloaded model asset binary directly
+COPY wine_quality_api.py /app/wine_quality_api.py
+COPY wine_quality_model.pkl /app/wine_quality_model.pkl
+
+# Expose server operational listening port
+EXPOSE 8000
+
+# Run service container via production ASGI configuration rules
+CMD ["uvicorn", "wine_quality_api.py:app", "--host", "0.0.0.0", "--port", "8000"]
